@@ -125,7 +125,7 @@
     </section>
 
     <section class="controls">
-      <b>Controls:</b> Move with WASD / Arrow keys • Attack with Space • Potion with Q • Open Shop with B (if you have crystals) • Enter to start.
+      <b>Controls:</b> Move with WASD / Arrow keys • Attack with Space (3-hit combo) • Dash with Shift • Potion with Q • Open Shop with B (if you have crystals) • Enter to start.
     </section>
   </main>
 
@@ -188,12 +188,17 @@
         lastTime: 0,
         cameraShake: 0,
         statusUntil: 0,
-        monsters: [], drops: [], particles: [],
+        monsters: [], drops: [], particles: [], enemyShots: [],
         player: {
           x: canvas.width / 2, y: canvas.height / 2, radius: 13, speed: 170,
           hp: 100, maxHp: 100, level: 1, xp: 0, xpToNext: 30, gold: 0, crystals: 0,
           facing: 0, attackT: 0, lastAttackAt: -999, potions: 0, hitFlash: 0,
-          ownedSwords: new Set(["rusty"]), equippedSword: "rusty", fireSlash: false
+          ownedSwords: new Set(["rusty"]), equippedSword: "rusty", fireSlash: false,
+          comboStep: 0, comboTimer: 0,
+          critChance: 0.12, critMult: 0.5, lifeSteal: 0,
+          flatDamage: 0, rangeBonus: 0,
+          shockChance: 0, whirlwind: false,
+          dashCd: 0, dashTime: 0, dashX: 0, dashY: 0
         }
       };
 
@@ -217,6 +222,7 @@
         state.monsters = [];
         for (let i = 0; i < count; i++) {
           const elite = Math.random() < Math.min(0.08 + state.mapIndex * 0.03, 0.3);
+          const ranged = elite && state.mapIndex >= 3 && Math.random() < 0.45;
           state.monsters.push({
             x: rand(40, canvas.width - 40), y: rand(40, canvas.height - 40),
             radius: elite ? 14 : 11,
@@ -225,9 +231,11 @@
             speed: elite ? 86 + state.mapIndex * 3 : 66 + state.mapIndex * 2,
             damage: elite ? 17 + Math.floor(state.mapIndex / 2) : 10 + Math.floor(state.mapIndex / 3),
             elite,
+            ranged,
             burn: 0,
             hitFlash: 0,
-            attackCd: rand(0.15, 0.6)
+            attackCd: rand(0.15, 0.6),
+            shotCd: rand(0.9, 1.6)
           });
         }
       }
@@ -239,6 +247,7 @@
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + 25);
         state.drops = [];
         state.particles = [];
+        state.enemyShots = [];
         spawnMonsters(maps[i].count);
         status(`Entered ${maps[i].name}`);
       }
@@ -341,6 +350,14 @@
         }, 0);
       }
 
+      shopItems.push(
+        { id: "crit", name: "Precision Core", desc: "+4% crit chance (repeatable)", cost: 1, once: false, action: () => { state.player.critChance = Math.min(0.6, state.player.critChance + 0.04); } },
+        { id: "vamp", name: "Vampiric Rune", desc: "+3% lifesteal (repeatable)", cost: 2, once: false, action: () => { state.player.lifeSteal = Math.min(0.25, state.player.lifeSteal + 0.03); } },
+        { id: "storm", name: "Storm Rune", desc: "20% chance to chain shock nearby mobs", cost: 2, once: true, action: () => { state.player.shockChance = 0.2; } },
+        { id: "whirl", name: "Whirlwind Form", desc: "Adds a second slash wave each attack", cost: 2, once: true, action: () => { state.player.whirlwind = true; } },
+        { id: "mastery", name: "Arc Mastery", desc: "+2 flat damage and +2 range (repeatable)", cost: 1, once: false, action: () => { state.player.flatDamage += 2; state.player.rangeBonus += 2; } }
+      );
+
       function startGame() {
         state.screen = "playing";
         overlays.menu.classList.remove("show");
@@ -351,13 +368,35 @@
         const p = state.player;
         if (state.screen !== "playing") return;
 
+        p.comboTimer = Math.max(0, p.comboTimer - dt);
+        if (p.comboTimer === 0) p.comboStep = 0;
+        p.dashCd = Math.max(0, p.dashCd - dt);
+        p.dashTime = Math.max(0, p.dashTime - dt);
+
         let mx = 0, my = 0;
         if (state.keys.has("a") || state.keys.has("ArrowLeft")) mx -= 1;
         if (state.keys.has("d") || state.keys.has("ArrowRight")) mx += 1;
         if (state.keys.has("w") || state.keys.has("ArrowUp")) my -= 1;
         if (state.keys.has("s") || state.keys.has("ArrowDown")) my += 1;
 
-        if (mx || my) {
+        if ((state.keys.has("Shift") || state.keys.has("ShiftLeft") || state.keys.has("ShiftRight")) && p.dashCd <= 0) {
+          const dashLen = Math.hypot(mx, my);
+          const dx = dashLen ? mx / dashLen : Math.cos(p.facing);
+          const dy = dashLen ? my / dashLen : Math.sin(p.facing);
+          p.dashX = dx;
+          p.dashY = dy;
+          p.dashTime = 0.12;
+          p.dashCd = 0.9;
+          state.cameraShake = 4;
+          state.keys.delete("Shift");
+          state.keys.delete("ShiftLeft");
+          state.keys.delete("ShiftRight");
+        }
+
+        if (p.dashTime > 0) {
+          p.x += p.dashX * 420 * dt;
+          p.y += p.dashY * 420 * dt;
+        } else if (mx || my) {
           const len = Math.hypot(mx, my);
           mx /= len; my /= len;
           p.facing = Math.atan2(my, mx);
@@ -371,27 +410,49 @@
         p.hitFlash = Math.max(0, p.hitFlash - dt);
 
         const sword = currentSword();
-        if (state.keys.has(" ") && t - p.lastAttackAt > sword.cooldown) {
-          p.lastAttackAt = t;
-          p.attackT = 1;
-          state.cameraShake = 6;
-          const aa = p.facing;
+        const comboMul = 1 + p.comboStep * 0.18;
+        const localCooldown = sword.cooldown * (1 - p.comboStep * 0.08);
+
+        const hitInArc = (attackAngle, damageScale = 1, arc = 0.9, extraRange = 0) => {
           state.monsters.forEach((m) => {
             const dx = m.x - p.x, dy = m.y - p.y;
             const dist = Math.hypot(dx, dy);
             const ang = Math.atan2(dy, dx);
-            const off = Math.atan2(Math.sin(ang - aa), Math.cos(ang - aa));
-            if (dist < sword.range + m.radius && Math.abs(off) < 0.9) {
-              const crit = Math.random() < 0.14;
-              const dmg = sword.damage + (crit ? sword.damage * 0.5 : 0);
+            const off = Math.atan2(Math.sin(ang - attackAngle), Math.cos(ang - attackAngle));
+            const range = sword.range + p.rangeBonus;
+            if (dist < range + m.radius + extraRange && Math.abs(off) < arc) {
+              const crit = Math.random() < p.critChance;
+              const base = sword.damage + p.flatDamage;
+              const dmg = (base * comboMul * damageScale) + (crit ? base * p.critMult : 0);
               m.hp -= dmg;
               m.hitFlash = 0.12;
               if (p.fireSlash) m.burn = Math.max(m.burn, 1.6);
+              if (p.lifeSteal > 0) p.hp = Math.min(p.maxHp, p.hp + dmg * p.lifeSteal * 0.2);
               m.x += Math.cos(ang) * 12;
               m.y += Math.sin(ang) * 12;
               spawnBlood(m.x, m.y, crit ? 22 : 14, p.fireSlash ? "#ff5e1f" : "#a6111c");
+
+              if (p.shockChance > 0 && Math.random() < p.shockChance) {
+                const nearby = state.monsters.find((o) => o !== m && o.hp > 0 && Math.hypot(o.x - m.x, o.y - m.y) < 90);
+                if (nearby) {
+                  nearby.hp -= (base * 0.6);
+                  nearby.hitFlash = 0.1;
+                  spawnBlood(nearby.x, nearby.y, 8, "#74d9ff");
+                }
+              }
             }
           });
+        };
+
+        if (state.keys.has(" ") && t - p.lastAttackAt > localCooldown) {
+          p.lastAttackAt = t;
+          p.attackT = 1;
+          state.cameraShake = 6;
+          const aa = p.facing;
+          hitInArc(aa, 1, 0.9);
+          if (p.whirlwind) hitInArc(aa + 0.52, 0.62, 0.95, 5);
+          p.comboStep = (p.comboStep + 1) % 3;
+          p.comboTimer = 0.9;
         }
 
         state.monsters.forEach((m) => {
@@ -401,6 +462,7 @@
           m.y += (dy / d) * m.speed * dt;
           m.hitFlash = Math.max(0, m.hitFlash - dt);
           m.attackCd -= dt;
+          m.shotCd -= dt;
 
           if (m.burn > 0) {
             m.burn -= dt;
@@ -408,7 +470,17 @@
             if (Math.random() < 0.3) spawnBlood(m.x, m.y, 1, "#ff7a2e");
           }
 
-          if (circleHit(p, m) && m.attackCd <= 0) {
+          if (m.ranged && m.shotCd <= 0) {
+            const dshot = Math.hypot(p.x - m.x, p.y - m.y);
+            if (dshot < 260) {
+              m.shotCd = 1.2;
+              const vx = ((p.x - m.x) / dshot) * 220;
+              const vy = ((p.y - m.y) / dshot) * 220;
+              state.enemyShots.push({ x: m.x, y: m.y, vx, vy, life: 2.2, r: 4, dmg: 9 + Math.floor(state.mapIndex / 2) });
+            }
+          }
+
+          if (circleHit(p, m) && m.attackCd <= 0 && p.dashTime <= 0) {
             m.attackCd = m.elite ? 0.78 : 0.95;
             p.hp -= m.damage;
             p.hitFlash = 0.2;
@@ -442,6 +514,18 @@
           }
         });
         state.drops = state.drops.filter((d) => d.life > 0);
+
+        state.enemyShots.forEach((s) => {
+          s.life -= dt;
+          s.x += s.vx * dt;
+          s.y += s.vy * dt;
+          if (p.dashTime <= 0 && ((s.x - p.x) ** 2 + (s.y - p.y) ** 2) < (p.radius + s.r) ** 2) {
+            p.hp -= s.dmg;
+            p.hitFlash = 0.18;
+            s.life = 0;
+          }
+        });
+        state.enemyShots = state.enemyShots.filter((s) => s.life > 0);
 
         if (state.keys.has("q") && p.potions > 0 && p.hp < p.maxHp) {
           p.potions -= 1;
@@ -534,6 +618,11 @@
           ctx.fillRect((m.x - w / 2) | 0, (m.y - m.radius - 8) | 0, w, 4);
           ctx.fillStyle = m.burn > 0 ? "#ff8d36" : m.elite ? "#d89aff" : "#a7ff91";
           ctx.fillRect((m.x - w / 2) | 0, (m.y - m.radius - 8) | 0, w * ratio, 4);
+
+          if (m.ranged) {
+            ctx.fillStyle = "#8fd7ff";
+            ctx.fillRect((m.x - 2) | 0, (m.y + m.radius - 1) | 0, 4, 4);
+          }
         });
       }
 
@@ -546,6 +635,10 @@
           const alpha = Math.max(0, p.life / p.maxLife);
           ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, "0");
           ctx.fillRect(p.x | 0, p.y | 0, p.size, p.size);
+        });
+        state.enemyShots.forEach((s) => {
+          ctx.fillStyle = "#8ad6ff";
+          ctx.fillRect((s.x - s.r) | 0, (s.y - s.r) | 0, s.r * 2, s.r * 2);
         });
       }
 
@@ -586,7 +679,11 @@
         hud.crystals.textContent = String(p.crystals);
         const s = currentSword();
         hud.weapon.textContent = `${s.name} (${s.damage} dmg)`;
-        hud.ability.textContent = p.fireSlash ? "Fire Slash" : "None";
+        const abilities = [];
+        if (p.fireSlash) abilities.push("Fire");
+        if (p.whirlwind) abilities.push("Whirl");
+        if (p.shockChance > 0) abilities.push("Storm");
+        hud.ability.textContent = abilities.length ? abilities.join("+") : "None";
         hud.map.textContent = maps[state.mapIndex]?.name || "-";
         hud.monsters.textContent = String(state.monsters.length);
         if (now() > state.statusUntil && state.screen === "playing") hud.status.textContent = "Clear monsters, level up, shop upgrades.";
