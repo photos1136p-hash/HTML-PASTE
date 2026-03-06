@@ -3,858 +3,917 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>DEADZONE — Survive the Night</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keep — My Notes</title>
+<link href="https://fonts.googleapis.com/css2?family=Product+Sans:wght@400;500;700&family=Google+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-  #canvas { display: block; width: 100vw; height: 100vh; }
-  #hud {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; z-index: 10;
+  :root {
+    --yellow: #fbbc04;
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --border: #e0e0e0;
+    --text-primary: #202124;
+    --text-secondary: #5f6368;
+    --accent: #1a73e8;
+    --hover: rgba(0,0,0,0.06);
+    --shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
+    --radius: 8px;
   }
-  #crosshair {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    width: 20px; height: 20px;
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Google Sans', 'Product Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
   }
-  #crosshair::before, #crosshair::after {
-    content: ''; position: absolute; background: rgba(255,255,255,0.85);
-  }
-  #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
-  #crosshair::after { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
-  #health-bar {
-    position: absolute; bottom: 40px; left: 40px;
-    width: 220px;
-  }
-  #health-label { color: #ff4444; font-size: 11px; letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 8px #ff4444; }
-  #health-track { width: 100%; height: 6px; background: rgba(255,68,68,0.2); border: 1px solid rgba(255,68,68,0.4); }
-  #health-fill { height: 100%; background: linear-gradient(90deg, #ff2222, #ff6644); transition: width 0.3s; box-shadow: 0 0 8px #ff4444; }
-  #ammo {
-    position: absolute; bottom: 40px; right: 40px; text-align: right;
-  }
-  #ammo-count { font-size: 48px; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.3); line-height: 1; }
-  #ammo-label { font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: 3px; }
-  #wave-info {
-    position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
-    text-align: center;
-  }
-  #wave-num { font-size: 13px; color: #ffaa00; letter-spacing: 4px; text-shadow: 0 0 12px #ffaa00; }
-  #enemy-count { font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 2px; margin-top: 4px; }
-  #score-display {
-    position: absolute; top: 30px; right: 40px;
-    color: rgba(255,255,255,0.6); font-size: 12px; letter-spacing: 2px; text-align: right;
-  }
-  #score-val { font-size: 24px; color: #fff; }
-  #kill-feed {
-    position: absolute; top: 100px; right: 40px;
-    text-align: right;
-  }
-  .kill-msg {
-    color: #ff6644; font-size: 11px; letter-spacing: 1px;
-    animation: fadeKill 2s forwards;
-  }
-  @keyframes fadeKill { 0%{opacity:1;transform:translateX(0)} 80%{opacity:1} 100%{opacity:0;transform:translateX(20px)} }
-  #overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.92); display: flex; flex-direction: column;
-    align-items: center; justify-content: center; z-index: 100;
-    color: #fff;
-  }
-  #overlay h1 {
-    font-size: 72px; letter-spacing: 12px; color: #ff2222;
-    text-shadow: 0 0 40px #ff2222, 0 0 80px rgba(255,34,34,0.3);
-    margin-bottom: 10px;
-  }
-  #overlay .sub {
-    font-size: 13px; letter-spacing: 6px; color: rgba(255,255,255,0.4);
-    margin-bottom: 60px;
-  }
-  #start-btn {
-    padding: 18px 60px; background: transparent;
-    border: 1px solid rgba(255,34,34,0.6); color: #ff4444;
-    font-family: 'Courier New', monospace; font-size: 14px; letter-spacing: 4px;
-    cursor: pointer; transition: all 0.3s; pointer-events: all;
-    text-transform: uppercase;
-  }
-  #start-btn:hover { background: rgba(255,34,34,0.1); border-color: #ff4444; box-shadow: 0 0 30px rgba(255,34,34,0.3); }
-  #controls-hint {
-    margin-top: 40px; color: rgba(255,255,255,0.25);
-    font-size: 11px; letter-spacing: 2px; line-height: 2; text-align: center;
-  }
-  #damage-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: radial-gradient(ellipse at center, transparent 40%, rgba(255,0,0,0.5) 100%);
-    pointer-events: none; z-index: 9; opacity: 0; transition: opacity 0.1s;
-  }
-  #reload-msg {
-    position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
-    color: #ffaa00; font-size: 12px; letter-spacing: 4px;
-    opacity: 0; transition: opacity 0.3s;
-  }
-  #gameover {
-    display: none; position: fixed; top:0; left:0; width:100%; height:100%;
-    background: rgba(0,0,0,0.9); z-index: 200;
-    flex-direction: column; align-items: center; justify-content: center;
-    color: #fff;
-  }
-  #gameover h2 { font-size: 60px; letter-spacing: 10px; color: #ff2222; text-shadow: 0 0 40px #ff2222; }
-  #gameover .stats { margin: 30px 0; color: rgba(255,255,255,0.5); font-size: 13px; letter-spacing: 3px; line-height: 2.5; text-align: center; }
-  #gameover .stats span { color: #fff; }
-  #restart-btn {
-    padding: 16px 50px; background: transparent;
-    border: 1px solid rgba(255,34,34,0.6); color: #ff4444;
-    font-family: 'Courier New', monospace; font-size: 13px; letter-spacing: 4px;
-    cursor: pointer; transition: all 0.3s; pointer-events: all;
-    margin-top: 10px;
-  }
-  #restart-btn:hover { background: rgba(255,34,34,0.1); box-shadow: 0 0 30px rgba(255,34,34,0.3); }
-  #muzzle-flash {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(255,220,100,0.06); pointer-events: none; z-index: 8;
-    opacity: 0;
-  }
-  #wave-announce {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    text-align: center; opacity: 0; pointer-events: none;
-    transition: opacity 0.5s;
-  }
-  #wave-announce .wave-title { font-size: 50px; color: #ffaa00; letter-spacing: 8px; text-shadow: 0 0 30px #ffaa00; }
-  #wave-announce .wave-sub { font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 4px; margin-top: 10px; }
+
+/* HEADER */
+header {
+position: sticky; top: 0; z-index: 100;
+background: var(–surface);
+border-bottom: 1px solid var(–border);
+display: flex; align-items: center;
+padding: 0 16px; height: 64px;
+gap: 12px;
+}
+.header-logo {
+display: flex; align-items: center; gap: 8px;
+text-decoration: none;
+}
+.header-logo svg { width: 36px; height: 36px; }
+.header-logo span {
+font-size: 22px; color: var(–text-secondary);
+font-weight: 400; letter-spacing: -0.3px;
+}
+.header-search {
+flex: 1; max-width: 720px; margin: 0 auto;
+position: relative;
+}
+.header-search input {
+width: 100%; padding: 10px 16px 10px 44px;
+background: #f1f3f4; border: none; border-radius: 24px;
+font-size: 16px; font-family: inherit; color: var(–text-primary);
+outline: none; transition: background 0.2s, box-shadow 0.2s;
+}
+.header-search input:focus {
+background: white;
+box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.header-search .search-icon {
+position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+color: var(–text-secondary);
+}
+.header-actions { display: flex; gap: 4px; }
+.icon-btn {
+width: 40px; height: 40px; border-radius: 50%;
+border: none; background: transparent; cursor: pointer;
+display: flex; align-items: center; justify-content: center;
+color: var(–text-secondary); transition: background 0.15s;
+}
+.icon-btn:hover { background: var(–hover); }
+.sync-status {
+font-size: 12px; color: var(–text-secondary);
+display: flex; align-items: center; gap: 4px;
+white-space: nowrap;
+}
+.sync-dot {
+width: 8px; height: 8px; border-radius: 50%;
+background: #34a853; transition: background 0.3s;
+}
+.sync-dot.syncing { background: var(–yellow); animation: pulse 1s infinite; }
+.sync-dot.error { background: #ea4335; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* MAIN LAYOUT */
+main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+
+/* NOTE COMPOSER */
+.composer-wrapper {
+max-width: 600px; margin: 0 auto 32px;
+}
+.composer {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+box-shadow: var(–shadow);
+overflow: hidden;
+transition: box-shadow 0.2s;
+}
+.composer:focus-within { box-shadow: var(–shadow-hover); }
+.composer-title {
+padding: 12px 16px 4px;
+font-size: 16px; font-weight: 500;
+border: none; background: transparent; width: 100%;
+outline: none; font-family: inherit; color: var(–text-primary);
+display: none;
+}
+.composer-title.visible { display: block; }
+.composer-body {
+padding: 12px 16px;
+font-size: 14px; line-height: 1.6;
+border: none; background: transparent; width: 100%;
+outline: none; font-family: inherit; color: var(–text-primary);
+resize: none; min-height: 48px; max-height: 80vh;
+overflow-y: auto;
+}
+.composer-actions {
+display: none; padding: 4px 8px 8px;
+justify-content: space-between; align-items: center;
+}
+.composer-actions.visible { display: flex; }
+.btn {
+padding: 8px 24px; border-radius: 4px; border: none;
+font-family: inherit; font-size: 14px; font-weight: 500;
+cursor: pointer; transition: background 0.15s;
+}
+.btn-close {
+background: transparent; color: var(–text-secondary);
+}
+.btn-close:hover { background: var(–hover); }
+
+/* COLOR PICKER */
+.color-row {
+display: flex; gap: 6px; padding: 4px 8px;
+flex-wrap: wrap;
+}
+.color-swatch {
+width: 28px; height: 28px; border-radius: 50%;
+cursor: pointer; border: 2px solid transparent;
+transition: transform 0.15s, border-color 0.15s;
+position: relative;
+}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.selected { border-color: #444; }
+.color-swatch.default { background: white; border-color: #ddd; }
+.color-swatch.default::after {
+content: ‘✕’; position: absolute; top: 50%; left: 50%;
+transform: translate(-50%,-50%); font-size: 10px; color: #bbb;
+}
+
+/* NOTES GRID */
+.section-label {
+font-size: 11px; font-weight: 500; letter-spacing: 0.8px;
+color: var(–text-secondary); text-transform: uppercase;
+margin-bottom: 12px; padding: 0 4px;
+}
+.notes-grid {
+columns: 5 180px; column-gap: 12px;
+}
+@media(max-width:600px){ .notes-grid { columns: 2 140px; } }
+
+/* NOTE CARD */
+.note-card {
+break-inside: avoid; margin-bottom: 12px;
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+box-shadow: var(–shadow);
+transition: box-shadow 0.2s, transform 0.15s;
+position: relative; cursor: default;
+animation: noteIn 0.2s ease;
+}
+@keyframes noteIn {
+from { opacity:0; transform: scale(0.96) translateY(4px); }
+to   { opacity:1; transform: scale(1) translateY(0); }
+}
+.note-card:hover {
+box-shadow: var(–shadow-hover);
+transform: translateY(-1px);
+}
+.note-card:hover .note-actions { opacity: 1; }
+.note-title {
+padding: 12px 12px 4px;
+font-size: 14px; font-weight: 500;
+word-break: break-word;
+}
+.note-body {
+padding: 4px 12px 12px;
+font-size: 13px; line-height: 1.6;
+color: var(–text-secondary);
+word-break: break-word;
+white-space: pre-wrap;
+}
+.note-body.expanded { max-height: none; }
+.note-footer {
+padding: 4px 4px 4px;
+display: flex; justify-content: space-between; align-items: center;
+}
+.note-actions {
+opacity: 0; display: flex; gap: 2px;
+transition: opacity 0.15s;
+}
+.note-time {
+font-size: 11px; color: #bbb;
+padding: 0 8px;
+}
+.note-pin {
+position: absolute; top: 6px; right: 6px;
+background: transparent; border: none;
+cursor: pointer; padding: 4px; border-radius: 50%;
+opacity: 0; transition: opacity 0.15s;
+color: var(–text-secondary);
+}
+.note-card:hover .note-pin,
+.note-card.pinned .note-pin { opacity: 1; }
+.note-card.pinned .note-pin { color: var(–text-primary); }
+.note-card.pinned { border-top: 3px solid var(–yellow); }
+
+/* MODAL */
+.modal-overlay {
+position: fixed; inset: 0;
+background: rgba(0,0,0,0.5);
+z-index: 200; display: flex;
+align-items: center; justify-content: center;
+padding: 16px;
+animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.modal {
+background: var(–surface);
+border-radius: var(–radius);
+width: 100%; max-width: 600px;
+max-height: 90vh; overflow-y: auto;
+box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+animation: slideUp 0.2s ease;
+display: flex; flex-direction: column;
+}
+@keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+.modal-title {
+padding: 16px 16px 8px;
+font-size: 18px; font-weight: 500;
+border: none; background: transparent; width: 100%;
+outline: none; font-family: inherit; color: var(–text-primary);
+resize: none;
+}
+.modal-body {
+padding: 8px 16px 16px;
+font-size: 15px; line-height: 1.7;
+border: none; background: transparent; width: 100%;
+outline: none; font-family: inherit; color: var(–text-primary);
+resize: none; flex: 1; min-height: 120px;
+}
+.modal-footer {
+padding: 8px 12px;
+display: flex; justify-content: space-between; align-items: center;
+border-top: 1px solid var(–border);
+gap: 8px; flex-wrap: wrap;
+}
+
+/* COPY DIALOG */
+.copy-dialog {
+position: fixed; inset: 0;
+background: rgba(0,0,0,0.4);
+z-index: 300; display: flex;
+align-items: center; justify-content: center;
+padding: 16px;
+}
+.copy-box {
+background: white; border-radius: 12px;
+padding: 24px; max-width: 340px; width: 100%;
+box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+text-align: center;
+animation: slideUp 0.2s ease;
+}
+.copy-box h3 { font-size: 18px; margin-bottom: 8px; }
+.copy-box p { font-size: 14px; color: var(–text-secondary); margin-bottom: 20px; }
+.copy-options { display: flex; flex-direction: column; gap: 10px; }
+.copy-opt-btn {
+padding: 12px; border-radius: 8px; border: 1px solid var(–border);
+background: white; font-family: inherit; font-size: 14px;
+font-weight: 500; cursor: pointer; display: flex;
+align-items: center; gap: 10px; transition: background 0.15s;
+}
+.copy-opt-btn:hover { background: #f1f3f4; }
+.copy-opt-btn.primary { background: var(–accent); color: white; border-color: var(–accent); }
+.copy-opt-btn.primary:hover { background: #1557b0; }
+.copy-cancel {
+margin-top: 12px; background: transparent; border: none;
+font-family: inherit; font-size: 14px; color: var(–text-secondary);
+cursor: pointer; padding: 8px;
+}
+
+/* EMPTY STATE */
+.empty-state {
+text-align: center; padding: 60px 20px;
+color: var(–text-secondary);
+}
+.empty-state svg { opacity: 0.3; margin-bottom: 16px; }
+.empty-state p { font-size: 16px; }
+
+/* TOAST */
+.toast {
+position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+background: #323232; color: white; padding: 12px 24px;
+border-radius: 4px; font-size: 14px; z-index: 400;
+animation: toastIn 0.3s ease;
+pointer-events: none;
+}
+@keyframes toastIn { from{opacity:0;transform:translateX(-50%) translateY(8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+
+/* LABEL / COLOR MAP */
+.note-label {
+display: inline-block; padding: 2px 8px;
+border-radius: 12px; font-size: 11px;
+background: #f1f3f4; color: var(–text-secondary);
+margin: 4px 12px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
 </style>
+
 </head>
 <body>
-<canvas id="canvas"></canvas>
 
-<div id="hud">
-  <div id="crosshair"></div>
-  <div id="health-bar">
-    <div id="health-label">HEALTH</div>
-    <div id="health-track"><div id="health-fill" style="width:100%"></div></div>
-  </div>
-  <div id="ammo">
-    <div id="ammo-count">30</div>
-    <div id="ammo-label">ROUNDS</div>
-  </div>
-  <div id="wave-info">
-    <div id="wave-num">WAVE 1</div>
-    <div id="enemy-count">ENEMIES: 5</div>
-  </div>
-  <div id="score-display">
-    <div style="font-size:11px;letter-spacing:3px;margin-bottom:4px">SCORE</div>
-    <div id="score-val">0</div>
-  </div>
-  <div id="kill-feed"></div>
-  <div id="damage-overlay"></div>
-  <div id="muzzle-flash"></div>
-  <div id="reload-msg">RELOADING...</div>
-  <div id="wave-announce">
-    <div class="wave-title" id="wave-title-text">WAVE 1</div>
-    <div class="wave-sub" id="wave-sub-text">SURVIVE</div>
-  </div>
-</div>
+<!-- HEADER -->
 
-<div id="overlay">
-  <h1>DEADZONE</h1>
-  <div class="sub">SURVIVE THE NIGHT</div>
-  <button id="start-btn" onclick="startGame()">ENTER ZONE</button>
-  <div class="controls-hint" id="controls-hint">
-    <div id="controls-hint" class="controls-hint">
-      WASD — MOVE &nbsp;|&nbsp; MOUSE — AIM &nbsp;|&nbsp; CLICK — FIRE &nbsp;|&nbsp; R — RELOAD &nbsp;|&nbsp; SHIFT — SPRINT
+<header>
+  <div class="header-logo">
+    <svg viewBox="0 0 36 36" fill="none">
+      <rect width="36" height="36" rx="4" fill="#fbbc04"/>
+      <rect x="9" y="9" width="18" height="3" rx="1.5" fill="white"/>
+      <rect x="9" y="15" width="18" height="3" rx="1.5" fill="white"/>
+      <rect x="9" y="21" width="12" height="3" rx="1.5" fill="white"/>
+    </svg>
+    <span>Keep</span>
+  </div>
+  <div class="header-search">
+    <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>
+    <input type="text" id="searchInput" placeholder="Search your notes">
+  </div>
+  <div class="header-actions">
+    <div class="sync-status" id="syncStatus">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncLabel">Synced</span>
+    </div>
+    <button class="icon-btn" onclick="syncNotes()" title="Sync now">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M23 4v6h-6M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- COMPOSER -->
+  <div class="composer-wrapper">
+    <div class="composer" id="composer">
+      <input type="text" class="composer-title" id="composerTitle" placeholder="Title" autocomplete="off">
+      <textarea class="composer-body" id="composerBody" placeholder="Take a note…" rows="1"></textarea>
+      <div class="color-row" id="composerColors"></div>
+      <div class="composer-actions" id="composerActions">
+        <div></div>
+        <button class="btn btn-close" onclick="closeComposer()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PINNED -->
+
+  <div id="pinnedSection" style="display:none">
+    <div class="section-label">Pinned</div>
+    <div class="notes-grid" id="pinnedGrid"></div>
+  </div>
+
+  <!-- OTHER -->
+
+  <div id="othersSection">
+    <div class="section-label" id="othersLabel" style="display:none">Others</div>
+    <div class="notes-grid" id="notesGrid"></div>
+    <div class="empty-state" id="emptyState">
+      <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      <p>Notes you add appear here</p>
+    </div>
+  </div>
+</main>
+
+<!-- EDIT MODAL -->
+
+<div class="modal-overlay" id="editModal" style="display:none" onclick="handleModalClick(event)">
+  <div class="modal" id="modalBox">
+    <textarea class="modal-title" id="modalTitle" placeholder="Title" rows="1"></textarea>
+    <textarea class="modal-body" id="modalBody" placeholder="Note…"></textarea>
+    <div class="color-row" id="modalColors"></div>
+    <div class="modal-footer">
+      <div style="display:flex;gap:4px" id="modalActionBtns">
+        <button class="icon-btn" onclick="openCopyDialog(currentEditId)" title="Copy">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+        <button class="icon-btn" onclick="deleteNote(currentEditId)" title="Delete">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
+      </div>
+      <button class="btn btn-close" onclick="closeModal()">Close</button>
     </div>
   </div>
 </div>
 
-<div id="gameover">
-  <h2>YOU DIED</h2>
-  <div class="stats">
-    WAVE REACHED &nbsp;<span id="go-wave">1</span><br>
-    KILLS &nbsp;<span id="go-kills">0</span><br>
-    SCORE &nbsp;<span id="go-score">0</span>
+<!-- COPY DIALOG -->
+
+<div class="copy-dialog" id="copyDialog" style="display:none">
+  <div class="copy-box">
+    <h3>📋 Copy Note</h3>
+    <p>How would you like to copy this note?</p>
+    <div class="copy-options">
+      <button class="copy-opt-btn primary" onclick="copyToClipboard()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy to Clipboard
+      </button>
+      <button class="copy-opt-btn" onclick="saveAsFile('txt')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Save as .txt File
+      </button>
+      <button class="copy-opt-btn" onclick="saveAsFile('md')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Save as .md File
+      </button>
+    </div>
+    <button class="copy-cancel" onclick="closeCopyDialog()">Cancel</button>
   </div>
-  <button id="restart-btn" onclick="restartGame()">TRY AGAIN</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
 <script>
-// ===== GAME STATE =====
-let scene, camera, renderer, clock;
-let player = { health: 100, maxHealth: 100, speed: 0.12, sprintSpeed: 0.22 };
-let ammo = 30, maxAmmo = 30, reloading = false, reloadTime = 2000;
-let score = 0, kills = 0, wave = 1, waveActive = false;
-let enemies = [], bullets = [], enemyBullets = [];
-let gameRunning = false, gameOver = false;
-let keys = {}, mouseX = 0, mouseY = 0;
-let yaw = 0, pitch = 0;
-let groundMeshes = [], trees = [], rocks = [];
-let nextWaveTimer = 0, waveEnemyCount = 0;
-let bobTime = 0, lastShot = 0;
-let flashTimeout;
-let muzzleFlashMesh;
+// ─── CONFIG ───────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'drake_keep_notes_v1';
+const SYNC_KEY    = 'drake_keep_sync_v1';
 
-// DOM refs
-const healthFill = document.getElementById('health-fill');
-const ammoCount = document.getElementById('ammo-count');
-const waveNum = document.getElementById('wave-num');
-const enemyCountEl = document.getElementById('enemy-count');
-const scoreVal = document.getElementById('score-val');
-const killFeed = document.getElementById('kill-feed');
-const damageOverlay = document.getElementById('damage-overlay');
-const muzzleFlashEl = document.getElementById('muzzle-flash');
-const reloadMsg = document.getElementById('reload-msg');
-const waveAnnounce = document.getElementById('wave-announce');
-const gameover = document.getElementById('gameover');
-const overlay = document.getElementById('overlay');
+// ─── STATE ────────────────────────────────────────────────────────────────
+let notes = [];
+let composerColor = null;
+let currentEditId = null;
+let copyTargetId  = null;
+let composerOpen  = false;
+let autoSaveTimer = null;
 
-function initThree() {
-  scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x0a0e14, 0.045);
-  scene.background = new THREE.Color(0x050810);
+const COLORS = [
+  { id: null,      label: 'Default', hex: null },
+  { id: 'yellow',  label: 'Yellow',  hex: '#fff9c4' },
+  { id: 'green',   label: 'Green',   hex: '#ccff90' },
+  { id: 'teal',    label: 'Teal',    hex: '#a7ffeb' },
+  { id: 'blue',    label: 'Blue',    hex: '#aecbfa' },
+  { id: 'purple',  label: 'Purple',  hex: '#d7aefb' },
+  { id: 'pink',    label: 'Pink',    hex: '#fbcfe8' },
+  { id: 'red',     label: 'Red',     hex: '#f28b82' },
+  { id: 'orange',  label: 'Orange',  hex: '#fbbc04' },
+  { id: 'gray',    label: 'Gray',    hex: '#e8eaed' },
+];
 
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 300);
-  camera.position.set(0, 1.7, 0);
+// ─── INIT ─────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  buildColorPickers();
+  loadNotes();
+  setupComposer();
+  setupSearch();
+  setupAutoSync();
+});
 
-  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.6;
-  renderer.outputEncoding = THREE.sRGBEncoding;
-
-  clock = new THREE.Clock();
-  buildWorld();
-  buildGun();
-  startWave(1);
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+// ─── STORAGE / SYNC ───────────────────────────────────────────────────────
+function saveNotes() {
+  try {
+    const data = { notes, updatedAt: Date.now() };
+    // Use window.name as cross-tab shared store fallback
+    // Primary: IndexedDB for large notes
+    saveToIDB(data);
+  } catch(e) { console.warn('save error', e); }
 }
 
-function buildWorld() {
-  // Ground — tiled plane with normal-ish look
-  const groundGeo = new THREE.PlaneGeometry(200, 200, 60, 60);
-  // Subtle vertex displacement for terrain feel
-  const pos = groundGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i);
-    const d = Math.sqrt(x*x+z*z);
-    if (d > 5) {
-      pos.setY(i, Math.sin(x*0.15)*Math.cos(z*0.12)*1.2 + Math.sin(x*0.4+z*0.3)*0.3);
+function loadNotes() {
+  loadFromIDB().then(data => {
+    if (data && data.notes) {
+      notes = data.notes;
+      renderAll();
     }
-  }
-  groundGeo.computeVertexNormals();
-  const groundMat = new THREE.MeshLambertMaterial({ color: 0x1a2a15 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Moon light
-  const moon = new THREE.DirectionalLight(0x6688bb, 0.8);
-  moon.position.set(30, 80, -40);
-  moon.castShadow = true;
-  moon.shadow.mapSize.width = 2048;
-  moon.shadow.mapSize.height = 2048;
-  moon.shadow.camera.near = 0.5;
-  moon.shadow.camera.far = 200;
-  moon.shadow.camera.left = -80;
-  moon.shadow.camera.right = 80;
-  moon.shadow.camera.top = 80;
-  moon.shadow.camera.bottom = -80;
-  scene.add(moon);
-
-  // Ambient
-  scene.add(new THREE.AmbientLight(0x111a22, 1.5));
-
-  // Red accent point lights (campfire feel)
-  const fireLight = new THREE.PointLight(0xff4400, 2, 20);
-  fireLight.position.set(0, 1, 0);
-  scene.add(fireLight);
-
-  // Stars
-  const starGeo = new THREE.BufferGeometry();
-  const starVerts = [];
-  for (let i = 0; i < 3000; i++) {
-    starVerts.push((Math.random()-0.5)*500, Math.random()*200+30, (Math.random()-0.5)*500);
-  }
-  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.3 });
-  scene.add(new THREE.Points(starGeo, starMat));
-
-  // Trees
-  for (let i = 0; i < 80; i++) {
-    let angle = Math.random() * Math.PI * 2;
-    let r = 15 + Math.random() * 55;
-    let tx = Math.cos(angle) * r, tz = Math.sin(angle) * r;
-    addTree(tx, tz);
-  }
-
-  // Rocks
-  for (let i = 0; i < 30; i++) {
-    let angle = Math.random() * Math.PI * 2;
-    let r = 8 + Math.random() * 40;
-    addRock(Math.cos(angle)*r, Math.sin(angle)*r);
-  }
-
-  // Perimeter wall (invisible boundary)
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    const wallLight = new THREE.PointLight(0x002244, 3, 15);
-    wallLight.position.set(Math.cos(a)*65, 3, Math.sin(a)*65);
-    scene.add(wallLight);
-  }
-}
-
-function addTree(x, z) {
-  const h = 4 + Math.random() * 5;
-  const trunkGeo = new THREE.CylinderGeometry(0.15, 0.3, h, 6);
-  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x2a1a0a });
-  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-  trunk.position.set(x, h/2, z);
-  trunk.castShadow = true;
-  scene.add(trunk);
-
-  // Foliage layers
-  for (let i = 0; i < 3; i++) {
-    const r = 1.8 - i * 0.4;
-    const fGeo = new THREE.ConeGeometry(r, 2.5, 7);
-    const fMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(0x0d2a0d).lerp(new THREE.Color(0x1a4a1a), Math.random()) });
-    const f = new THREE.Mesh(fGeo, fMat);
-    f.position.set(x, h - 0.5 + i * 1.8, z);
-    f.rotation.y = Math.random() * Math.PI;
-    f.castShadow = true;
-    scene.add(f);
-  }
-  trees.push({ x, z, r: 0.4 });
-}
-
-function addRock(x, z) {
-  const s = 0.5 + Math.random() * 1.5;
-  const geo = new THREE.DodecahedronGeometry(s, 0);
-  const mat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, s * 0.3, z);
-  mesh.rotation.set(Math.random(), Math.random(), Math.random());
-  mesh.castShadow = true;
-  scene.add(mesh);
-  rocks.push({ x, z, r: s * 0.9 });
-}
-
-// ===== GUN =====
-let gunGroup;
-function buildGun() {
-  gunGroup = new THREE.Group();
-  // Barrel
-  const barrelGeo = new THREE.BoxGeometry(0.06, 0.06, 0.5);
-  const metalMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  const barrel = new THREE.Mesh(barrelGeo, metalMat);
-  barrel.position.z = -0.35;
-  gunGroup.add(barrel);
-  // Body
-  const bodyGeo = new THREE.BoxGeometry(0.1, 0.12, 0.35);
-  const body = new THREE.Mesh(bodyGeo, metalMat);
-  body.position.set(0, -0.02, -0.12);
-  gunGroup.add(body);
-  // Grip
-  const gripGeo = new THREE.BoxGeometry(0.08, 0.14, 0.08);
-  const gripMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-  const grip = new THREE.Mesh(gripGeo, gripMat);
-  grip.position.set(0, -0.12, 0.02);
-  grip.rotation.x = 0.2;
-  gunGroup.add(grip);
-  // Scope
-  const scopeGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.18, 8);
-  const scope = new THREE.Mesh(scopeGeo, metalMat);
-  scope.rotation.x = Math.PI/2;
-  scope.position.set(0, 0.075, -0.2);
-  gunGroup.add(scope);
-
-  gunGroup.position.set(0.22, -0.22, -0.5);
-  camera.add(gunGroup);
-  scene.add(camera);
-
-  // Muzzle flash
-  const flashGeo = new THREE.SphereGeometry(0.08, 6, 6);
-  const flashMat = new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0 });
-  muzzleFlashMesh = new THREE.Mesh(flashGeo, flashMat);
-  muzzleFlashMesh.position.set(0, 0, -0.62);
-  gunGroup.add(muzzleFlashMesh);
-}
-
-// ===== ENEMIES =====
-function spawnEnemy() {
-  const angle = Math.random() * Math.PI * 2;
-  const r = 30 + Math.random() * 15;
-  const x = Math.cos(angle) * r;
-  const z = Math.sin(angle) * r;
-
-  const group = new THREE.Group();
-  // Body
-  const bodyGeo = new THREE.BoxGeometry(0.7, 1.0, 0.4);
-  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x331100 });
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.position.y = 1.0;
-  body.castShadow = true;
-  group.add(body);
-  // Head
-  const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.45);
-  const headMat = new THREE.MeshLambertMaterial({ color: 0x662200 });
-  const head = new THREE.Mesh(headGeo, headMat);
-  head.position.y = 1.75;
-  head.castShadow = true;
-  group.add(head);
-  // Eyes glow
-  const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
-  [-0.12, 0.12].forEach(ex => {
-    const eye = new THREE.Mesh(eyeGeo, eyeMat);
-    eye.position.set(ex, 1.78, -0.22);
-    group.add(eye);
-  });
-  // Legs
-  [-0.18, 0.18].forEach(lx => {
-    const legGeo = new THREE.BoxGeometry(0.22, 0.8, 0.22);
-    const leg = new THREE.Mesh(legGeo, bodyMat);
-    leg.position.set(lx, 0.4, 0);
-    leg.castShadow = true;
-    group.add(leg);
-  });
-  // Arms
-  [-0.5, 0.5].forEach(ax => {
-    const armGeo = new THREE.BoxGeometry(0.18, 0.75, 0.18);
-    const arm = new THREE.Mesh(armGeo, bodyMat);
-    arm.position.set(ax, 1.05, 0);
-    arm.castShadow = true;
-    group.add(arm);
-  });
-
-  // Eye point light
-  const eyeLight = new THREE.PointLight(0xff2200, 1.5, 5);
-  eyeLight.position.set(0, 1.78, -0.3);
-  group.add(eyeLight);
-
-  group.position.set(x, 0, z);
-  scene.add(group);
-
-  const hp = 40 + wave * 15;
-  enemies.push({
-    mesh: group,
-    hp, maxHp: hp,
-    x, z,
-    speed: 0.025 + wave * 0.005 + Math.random() * 0.01,
-    lastShot: 0,
-    shotInterval: 2500 - wave * 150,
-    walkTime: 0,
-    alive: true
+    setSyncStatus('synced');
+  }).catch(() => {
+    notes = [];
+    renderAll();
   });
 }
 
-function startWave(num) {
-  wave = num;
-  waveEnemyCount = 3 + num * 3;
-  waveActive = true;
-  waveNum.textContent = `WAVE ${num}`;
-  updateEnemyCount();
+// IndexedDB for unlimited storage
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('KeepDB', 1);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore('notes', { keyPath: 'id' });
+      e.target.result.createObjectStore('meta', { keyPath: 'id' });
+    };
+    req.onsuccess  = e => res(e.target.result);
+    req.onerror    = e => rej(e);
+  });
+}
 
-  // Announce
-  document.getElementById('wave-title-text').textContent = `WAVE ${num}`;
-  document.getElementById('wave-sub-text').textContent = `${waveEnemyCount} ENEMIES INCOMING`;
-  waveAnnounce.style.opacity = '1';
-  setTimeout(() => { waveAnnounce.style.opacity = '0'; }, 2500);
+async function saveToIDB(data) {
+  const db = await openDB();
+  const tx = db.transaction('meta', 'readwrite');
+  tx.objectStore('meta').put({ id: STORAGE_KEY, ...data });
+  setSyncStatus('syncing');
+  await new Promise(r => tx.oncomplete = r);
+  setSyncStatus('synced');
+}
 
-  // Spawn enemies staggered
-  let spawned = 0;
-  const spawnNext = () => {
-    if (spawned < waveEnemyCount && gameRunning) {
-      spawnEnemy();
-      spawned++;
-      setTimeout(spawnNext, 600 - Math.min(wave*40, 400));
+async function loadFromIDB() {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction('meta', 'readonly');
+    const req = tx.objectStore('meta').get(STORAGE_KEY);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e);
+  });
+}
+
+// BroadcastChannel for same-device cross-tab sync
+const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('keep_sync') : null;
+if (bc) {
+  bc.onmessage = e => {
+    if (e.data && e.data.type === 'NOTES_UPDATED') {
+      notes = e.data.notes;
+      renderAll();
+      setSyncStatus('synced');
     }
   };
-  spawnNext();
 }
 
-function updateEnemyCount() {
-  enemyCountEl.textContent = `ENEMIES: ${enemies.filter(e=>e.alive).length}`;
+function broadcastSync() {
+  if (bc) bc.postMessage({ type: 'NOTES_UPDATED', notes });
 }
 
-// ===== SHOOTING =====
-function shoot() {
-  if (!gameRunning || reloading || ammo <= 0) return;
-  const now = Date.now();
-  if (now - lastShot < 120) return;
-  lastShot = now;
+function syncNotes() {
+  setSyncStatus('syncing');
+  saveToIDB({ notes, updatedAt: Date.now() }).then(() => {
+    broadcastSync();
+    showToast('Notes synced!');
+  });
+}
 
-  ammo--;
-  ammoCount.textContent = ammo;
-  if (ammo === 0) startReload();
+function setupAutoSync() {
+  // Every 30 sec
+  setInterval(() => saveToIDB({ notes, updatedAt: Date.now() }), 30000);
+}
 
-  // Muzzle flash
-  muzzleFlashMesh.material.opacity = 0.9;
-  muzzleFlashEl.style.opacity = '1';
-  clearTimeout(flashTimeout);
-  flashTimeout = setTimeout(() => {
-    muzzleFlashMesh.material.opacity = 0;
-    muzzleFlashEl.style.opacity = '0';
-  }, 60);
+function setSyncStatus(state) {
+  const dot   = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  dot.className = 'sync-dot' + (state === 'syncing' ? ' syncing' : state === 'error' ? ' error' : '');
+  label.textContent = state === 'syncing' ? 'Syncing…' : state === 'error' ? 'Offline' : 'Synced';
+}
 
-  // Gun kick
-  gunGroup.position.z += 0.05;
-  setTimeout(() => { gunGroup.position.z -= 0.05; }, 80);
+// ─── NOTE CRUD ────────────────────────────────────────────────────────────
+function createNote(title, body, color) {
+  if (!title.trim() && !body.trim()) return;
+  const note = {
+    id:        Date.now().toString(),
+    title:     title.trim(),
+    body:      body.trim(),
+    color:     color || null,
+    pinned:    false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  notes.unshift(note);
+  saveNotes();
+  broadcastSync();
+  renderAll();
+  return note;
+}
 
-  // Raycast
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
+function updateNote(id, changes) {
+  const i = notes.findIndex(n => n.id === id);
+  if (i < 0) return;
+  notes[i] = { ...notes[i], ...changes, updatedAt: Date.now() };
+  saveNotes();
+  broadcastSync();
+  renderAll();
+}
 
-  // Slight spread
-  dir.x += (Math.random()-0.5)*0.02;
-  dir.y += (Math.random()-0.5)*0.02;
-  dir.normalize();
+function deleteNote(id) {
+  notes = notes.filter(n => n.id !== id);
+  saveNotes();
+  broadcastSync();
+  renderAll();
+  closeModal();
+  showToast('Note deleted');
+}
 
-  // Check enemy hits
-  const ray = new THREE.Raycaster(camera.position.clone(), dir, 0, 150);
-  let hit = false;
-  let closest = null, closestDist = Infinity;
+function togglePin(id) {
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+  updateNote(id, { pinned: !note.pinned });
+}
 
-  enemies.forEach(e => {
-    if (!e.alive) return;
-    const meshes = [];
-    e.mesh.traverse(c => { if (c.isMesh) meshes.push(c); });
-    const intersects = ray.intersectObjects(meshes);
-    if (intersects.length > 0 && intersects[0].distance < closestDist) {
-      closestDist = intersects[0].distance;
-      closest = { enemy: e, point: intersects[0].point };
+// ─── RENDER ───────────────────────────────────────────────────────────────
+function renderAll(filter = '') {
+  const q       = filter.toLowerCase();
+  const visible = q
+    ? notes.filter(n => (n.title + n.body).toLowerCase().includes(q))
+    : notes;
+  const pinned  = visible.filter(n => n.pinned);
+  const others  = visible.filter(n => !n.pinned);
+
+  const pSec = document.getElementById('pinnedSection');
+  const oLbl = document.getElementById('othersLabel');
+  const pGrid = document.getElementById('pinnedGrid');
+  const nGrid = document.getElementById('notesGrid');
+  const empty = document.getElementById('emptyState');
+
+  pSec.style.display = pinned.length ? '' : 'none';
+  oLbl.style.display = pinned.length && others.length ? '' : 'none';
+
+  pGrid.innerHTML = pinned.map(noteCard).join('');
+  nGrid.innerHTML = others.map(noteCard).join('');
+  empty.style.display = others.length === 0 && pinned.length === 0 ? '' : 'none';
+}
+
+function noteCard(n) {
+  const bg    = n.color ? COLORS.find(c => c.id === n.color)?.hex || '' : '';
+  const style = bg ? `background:${bg};border-color:${bg};` : '';
+  const time  = relTime(n.updatedAt);
+  return `
+  <div class="note-card${n.pinned ? ' pinned':''}" id="card-${n.id}" style="${style}"
+       onclick="openNote('${n.id}')">
+    <button class="note-pin" onclick="event.stopPropagation();togglePin('${n.id}')" title="${n.pinned?'Unpin':'Pin'}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="${n.pinned?'currentColor':'none'}" stroke="currentColor" stroke-width="2">
+        <path d="M12 2l3 7h5l-4 5 1.5 7L12 17l-5.5 4L8 14 4 9h5z"/>
+      </svg>
+    </button>
+    ${n.title ? `<div class="note-title">${esc(n.title)}</div>` : ''}
+    <div class="note-body">${esc(n.body)}</div>
+    <div class="note-footer">
+      <div class="note-actions">
+        <button class="icon-btn" onclick="event.stopPropagation();openCopyDialog('${n.id}')" title="Copy">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+        <button class="icon-btn" onclick="event.stopPropagation();deleteNote('${n.id}')" title="Delete">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>
+          </svg>
+        </button>
+      </div>
+      <span class="note-time">${time}</span>
+    </div>
+  </div>`;
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function relTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60000)     return 'Just now';
+  if (diff < 3600000)   return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000)  return Math.floor(diff/3600000) + 'h ago';
+  if (diff < 604800000) return Math.floor(diff/86400000) + 'd ago';
+  return new Date(ts).toLocaleDateString();
+}
+
+// ─── COMPOSER ─────────────────────────────────────────────────────────────
+function setupComposer() {
+  const body    = document.getElementById('composerBody');
+  const title   = document.getElementById('composerTitle');
+  const actions = document.getElementById('composerActions');
+
+  body.addEventListener('focus', () => {
+    composerOpen = true;
+    title.classList.add('visible');
+    actions.classList.add('visible');
+    body.style.minHeight = '80px';
+  });
+
+  // Auto-resize
+  [body, title].forEach(el => el.addEventListener('input', () => autoResize(el)));
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+function closeComposer() {
+  const title  = document.getElementById('composerTitle').value;
+  const body   = document.getElementById('composerBody').value;
+  if (title.trim() || body.trim()) {
+    createNote(title, body, composerColor);
+  }
+  document.getElementById('composerTitle').value = '';
+  document.getElementById('composerBody').value  = '';
+  document.getElementById('composerTitle').classList.remove('visible');
+  document.getElementById('composerActions').classList.remove('visible');
+  document.getElementById('composerBody').style.minHeight = '48px';
+  composerColor = null;
+  composerOpen  = false;
+  updateColorPicker('composerColors', composerColor, (c) => { composerColor = c; });
+}
+
+// ─── COLOR PICKERS ────────────────────────────────────────────────────────
+function buildColorPickers() {
+  updateColorPicker('composerColors', null, (c) => { composerColor = c; });
+  updateColorPicker('modalColors',    null, (c) => {
+    if (currentEditId) updateNote(currentEditId, { color: c });
+  });
+}
+
+function updateColorPicker(containerId, selected, onSelect) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  wrap.innerHTML = COLORS.map(c => `
+    <div class="color-swatch ${c.id ? '' : 'default'}${selected === c.id ? ' selected' : ''}"
+         style="${c.hex ? 'background:'+c.hex : ''}"
+         title="${c.label}"
+         onclick="handleColorPick('${containerId}','${c.id||''}')">
+    </div>
+  `).join('');
+  wrap._onSelect = onSelect;
+}
+
+function handleColorPick(containerId, colorId) {
+  const wrap = document.getElementById(containerId);
+  const id   = colorId || null;
+  wrap.querySelectorAll('.color-swatch').forEach((el, i) => {
+    el.classList.toggle('selected', COLORS[i].id === id);
+  });
+  if (wrap._onSelect) wrap._onSelect(id);
+
+  // Update modal background
+  if (containerId === 'modalColors' && currentEditId) {
+    const hex = COLORS.find(c => c.id === id)?.hex || '';
+    document.getElementById('modalBox').style.background = hex || 'white';
+    updateNote(currentEditId, { color: id });
+  }
+}
+
+// ─── EDIT MODAL ───────────────────────────────────────────────────────────
+function openNote(id) {
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+  currentEditId = id;
+
+  const mTitle = document.getElementById('modalTitle');
+  const mBody  = document.getElementById('modalBody');
+  mTitle.value = note.title;
+  mBody.value  = note.body;
+
+  const hex = note.color ? COLORS.find(c => c.id === note.color)?.hex || '' : '';
+  document.getElementById('modalBox').style.background = hex || 'white';
+
+  updateColorPicker('modalColors', note.color, (c) => {
+    if (currentEditId) {
+      const h = COLORS.find(x => x.id === c)?.hex || '';
+      document.getElementById('modalBox').style.background = h || 'white';
+      updateNote(currentEditId, { color: c });
     }
   });
 
-  if (closest) {
-    hitEnemy(closest.enemy, 25 + Math.random() * 10);
-    spawnHitParticles(closest.point, 0xff4400);
-    hit = true;
-  }
+  document.getElementById('editModal').style.display = 'flex';
 
-  // Bullet tracer
-  spawnBulletTracer(camera.position.clone(), dir);
-}
-
-function hitEnemy(enemy, dmg) {
-  enemy.hp -= dmg;
-  enemy.mesh.children.forEach(c => {
-    if (c.isMesh) {
-      c.material = c.material.clone();
-      c.material.emissive = new THREE.Color(0.5, 0.1, 0.0);
-      setTimeout(() => { if(c.material) c.material.emissive.set(0,0,0); }, 100);
-    }
+  // Auto-save on type
+  [mTitle, mBody].forEach(el => {
+    el.addEventListener('input', scheduleModalSave);
+    autoResize(el);
+    el.addEventListener('input', () => autoResize(el));
   });
-  if (enemy.hp <= 0) killEnemy(enemy);
+
+  mBody.focus();
 }
 
-function killEnemy(enemy) {
-  enemy.alive = false;
-  scene.remove(enemy.mesh);
-  kills++;
-  score += 100 + wave * 50;
-  scoreVal.textContent = score;
-  addKillMsg();
-  updateEnemyCount();
+function scheduleModalSave() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    if (!currentEditId) return;
+    const title = document.getElementById('modalTitle').value;
+    const body  = document.getElementById('modalBody').value;
+    updateNote(currentEditId, { title, body });
+  }, 600);
+}
 
-  spawnHitParticles(enemy.mesh.position.clone().add(new THREE.Vector3(0,1,0)), 0x881100);
-
-  const aliveEnemies = enemies.filter(e => e.alive);
-  if (aliveEnemies.length === 0 && waveActive) {
-    waveActive = false;
-    ammo = maxAmmo;
-    ammoCount.textContent = ammo;
-    setTimeout(() => startWave(wave + 1), 3000);
+function closeModal() {
+  // Final save
+  if (currentEditId) {
+    const title = document.getElementById('modalTitle').value;
+    const body  = document.getElementById('modalBody').value;
+    updateNote(currentEditId, { title, body });
   }
+  document.getElementById('editModal').style.display = 'none';
+  currentEditId = null;
+  document.getElementById('modalTitle').removeEventListener('input', scheduleModalSave);
+  document.getElementById('modalBody').removeEventListener('input', scheduleModalSave);
 }
 
-function addKillMsg() {
-  const msgs = ['ELIMINATED', 'HOSTILE DOWN', 'NEUTRALIZED', 'TARGET DOWN', 'CLEAN SHOT'];
-  const div = document.createElement('div');
-  div.className = 'kill-msg';
-  div.textContent = msgs[Math.floor(Math.random()*msgs.length)];
-  killFeed.appendChild(div);
-  setTimeout(() => div.remove(), 2000);
+function handleModalClick(e) {
+  if (e.target === document.getElementById('editModal')) closeModal();
 }
 
-function startReload() {
-  if (reloading || ammo === maxAmmo) return;
-  reloading = true;
-  reloadMsg.style.opacity = '1';
-  gunGroup.rotation.z = 0.3;
-  setTimeout(() => {
-    reloading = false;
-    ammo = maxAmmo;
-    ammoCount.textContent = ammo;
-    reloadMsg.style.opacity = '0';
-    gunGroup.rotation.z = 0;
-  }, reloadTime);
+// ─── COPY / SAVE ──────────────────────────────────────────────────────────
+function openCopyDialog(id) {
+  copyTargetId = id;
+  document.getElementById('copyDialog').style.display = 'flex';
 }
 
-// ===== PARTICLES =====
-let particles = [];
-function spawnHitParticles(pos, color) {
-  const c = new THREE.Color(color);
-  for (let i = 0; i < 8; i++) {
-    const geo = new THREE.SphereGeometry(0.04, 4, 4);
-    const mat = new THREE.MeshBasicMaterial({ color: c });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(pos);
-    scene.add(mesh);
-    const vel = new THREE.Vector3((Math.random()-0.5)*0.3, Math.random()*0.3, (Math.random()-0.5)*0.3);
-    particles.push({ mesh, vel, life: 0.5 });
-  }
+function closeCopyDialog() {
+  document.getElementById('copyDialog').style.display = 'none';
+  copyTargetId = null;
 }
 
-function spawnBulletTracer(origin, dir) {
-  const geo = new THREE.CylinderGeometry(0.01, 0.01, 2, 4);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffee88, transparent: true, opacity: 0.6 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.copy(origin).addScaledVector(dir, 1);
-  mesh.lookAt(origin.clone().addScaledVector(dir, -1));
-  mesh.rotation.x += Math.PI/2;
-  scene.add(mesh);
-  particles.push({ mesh, vel: dir.clone().multiplyScalar(0.8), life: 0.12, tracer: true });
+function getNoteText(id) {
+  const note = notes.find(n => n.id === id || n.id === copyTargetId);
+  if (!note) return '';
+  let text = '';
+  if (note.title) text += note.title + '\n\n';
+  text += note.body;
+  return text;
 }
 
-// ===== PLAYER MOVEMENT =====
-function movePlayer(dt) {
-  const sprint = keys['ShiftLeft'] || keys['ShiftRight'];
-  const speed = sprint ? player.sprintSpeed : player.speed;
+function copyToClipboard() {
+  const text = getNoteText(copyTargetId);
+  navigator.clipboard.writeText(text).then(() => {
+    closeCopyDialog();
+    showToast('Copied to clipboard!');
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    closeCopyDialog();
+    showToast('Copied!');
+  });
+}
 
-  const dir = new THREE.Vector3();
-  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-  const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-
-  if (keys['KeyW'] || keys['ArrowUp']) dir.add(fwd);
-  if (keys['KeyS'] || keys['ArrowDown']) dir.sub(fwd);
-  if (keys['KeyA'] || keys['ArrowLeft']) dir.sub(right);
-  if (keys['KeyD'] || keys['ArrowRight']) dir.add(right);
-  if (dir.length() > 0) dir.normalize();
-
-  let nx = camera.position.x + dir.x * speed;
-  let nz = camera.position.z + dir.z * speed;
-
-  // Boundary
-  const maxR = 60;
-  if (Math.sqrt(nx*nx+nz*nz) < maxR) {
-    // Simple obstacle check (trees/rocks)
-    let blocked = false;
-    trees.forEach(t => { if (Math.sqrt((nx-t.x)**2+(nz-t.z)**2) < t.r+0.4) blocked = true; });
-    rocks.forEach(r => { if (Math.sqrt((nx-r.x)**2+(nz-r.z)**2) < r.r+0.3) blocked = true; });
-    if (!blocked) {
-      camera.position.x = nx;
-      camera.position.z = nz;
-    }
-  }
-
-  // Head bob
-  if (dir.length() > 0) {
-    bobTime += dt * (sprint ? 12 : 8);
-    camera.position.y = 1.7 + Math.sin(bobTime) * 0.04;
+function saveAsFile(ext) {
+  const note = notes.find(n => n.id === copyTargetId);
+  if (!note) return;
+  let text = '';
+  if (ext === 'md') {
+    if (note.title) text += `# ${note.title}\n\n`;
+    text += note.body;
   } else {
-    camera.position.y = 1.7 + Math.sin(bobTime) * 0.01;
+    if (note.title) text += note.title + '\n' + '─'.repeat(note.title.length) + '\n\n';
+    text += note.body;
   }
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const safe = (note.title || 'note').replace(/[^a-z0-9]/gi, '_').substring(0, 40);
+  a.href     = url;
+  a.download = `${safe}.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  closeCopyDialog();
+  showToast(`Saved as ${safe}.${ext}`);
 }
 
-function updateEnemies(dt) {
-  const now = Date.now();
-  enemies.forEach(e => {
-    if (!e.alive) return;
-    const px = camera.position.x, pz = camera.position.z;
-    const dx = px - e.x, dz = pz - e.z;
-    const dist = Math.sqrt(dx*dx+dz*dz);
-
-    // Move toward player
-    if (dist > 2) {
-      e.x += (dx/dist)*e.speed;
-      e.z += (dz/dist)*e.speed;
-      e.mesh.position.set(e.x, 0, e.z);
-    }
-
-    // Walk animation
-    e.walkTime += dt * 5;
-    e.mesh.rotation.y = Math.atan2(dx, dz);
-    e.mesh.children.forEach((c,i) => {
-      if (i < 2 && c.isMesh) { // legs
-        // c.rotation.x = Math.sin(e.walkTime + i*Math.PI) * 0.4;
-      }
-    });
-
-    // Look at player
-    e.mesh.lookAt(new THREE.Vector3(px, 0, pz));
-
-    // Attack
-    if (dist < 2.5) {
-      if (now - e.lastShot > 800) {
-        e.lastShot = now;
-        damagePlayer(8 + wave * 2);
-      }
-    } else if (dist < 35 && now - e.lastShot > e.shotInterval) {
-      e.lastShot = now;
-      fireEnemyBullet(e);
-    }
+// ─── SEARCH ───────────────────────────────────────────────────────────────
+function setupSearch() {
+  let timer;
+  document.getElementById('searchInput').addEventListener('input', e => {
+    clearTimeout(timer);
+    timer = setTimeout(() => renderAll(e.target.value), 150);
   });
 }
 
-function fireEnemyBullet(enemy) {
-  const px = camera.position.x, pz = camera.position.z;
-  const dx = px - enemy.x, dz = pz - enemy.z;
-  const dist = Math.sqrt(dx*dx+dz*dz);
-  const dir = new THREE.Vector3(dx/dist + (Math.random()-0.5)*0.15, 0, dz/dist + (Math.random()-0.5)*0.15).normalize();
-
-  const geo = new THREE.SphereGeometry(0.06, 6, 6);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(enemy.x, 1.4, enemy.z);
-  scene.add(mesh);
-  enemyBullets.push({ mesh, dir, speed: 0.35, x: enemy.x, y: 1.4, z: enemy.z, life: 4 });
+// ─── TOAST ────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  clearTimeout(toastTimer);
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  toastTimer = setTimeout(() => t.remove(), 2500);
 }
 
-function updateEnemyBullets(dt) {
-  enemyBullets = enemyBullets.filter(b => {
-    b.x += b.dir.x * b.speed;
-    b.z += b.dir.z * b.speed;
-    b.mesh.position.set(b.x, b.y, b.z);
-    b.life -= dt;
-
-    // Hit player
-    const px = camera.position.x, pz = camera.position.z;
-    if (Math.sqrt((b.x-px)**2+(b.z-pz)**2) < 1.0) {
-      damagePlayer(10 + wave * 3);
-      scene.remove(b.mesh);
-      return false;
-    }
-    if (b.life <= 0) { scene.remove(b.mesh); return false; }
-    return true;
-  });
-}
-
-function damagePlayer(dmg) {
-  player.health = Math.max(0, player.health - dmg);
-  healthFill.style.width = (player.health / player.maxHealth * 100) + '%';
-  damageOverlay.style.opacity = '0.8';
-  setTimeout(() => damageOverlay.style.opacity = '0', 200);
-  if (player.health <= 0) triggerGameOver();
-}
-
-function updateParticles(dt) {
-  particles = particles.filter(p => {
-    p.life -= dt;
-    p.mesh.position.add(p.vel.clone().multiplyScalar(dt * 60));
-    if (!p.tracer) { p.vel.y -= 0.01; }
-    p.mesh.material.opacity = Math.max(0, p.life / 0.5);
-    if (p.life <= 0) { scene.remove(p.mesh); return false; }
-    return true;
-  });
-}
-
-function triggerGameOver() {
-  gameRunning = false;
-  gameOver = true;
-  document.getElementById('go-wave').textContent = wave;
-  document.getElementById('go-kills').textContent = kills;
-  document.getElementById('go-score').textContent = score;
-  gameover.style.display = 'flex';
-  document.exitPointerLock();
-}
-
-// ===== GAME LOOP =====
-function gameLoop() {
-  if (!gameRunning) return;
-  requestAnimationFrame(gameLoop);
-
-  const dt = Math.min(clock.getDelta(), 0.05);
-
-  movePlayer(dt);
-  updateEnemies(dt);
-  updateEnemyBullets(dt);
-  updateParticles(dt);
-
-  // Camera rotation
-  camera.rotation.order = 'YXZ';
-  camera.rotation.y = yaw;
-  camera.rotation.x = pitch;
-
-  // Gun sway
-  gunGroup.position.x = 0.22 + Math.sin(bobTime*0.7)*0.005;
-  gunGroup.position.y = -0.22 + Math.cos(bobTime)*0.005;
-
-  renderer.render(scene, camera);
-}
-
-// ===== CONTROLS =====
+// ─── KEYBOARD ─────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'KeyR' && !reloading && ammo < maxAmmo && gameRunning) startReload();
-});
-document.addEventListener('keyup', e => { keys[e.code] = false; });
-
-document.addEventListener('mousemove', e => {
-  if (!gameRunning) return;
-  const s = 0.002;
-  yaw -= e.movementX * s;
-  pitch -= e.movementY * s;
-  pitch = Math.max(-0.6, Math.min(0.6, pitch));
-});
-
-document.addEventListener('mousedown', e => {
-  if (!gameRunning) return;
-  if (e.button === 0) shoot();
-});
-
-document.addEventListener('pointerlockchange', () => {
-  if (!document.pointerLockElement && gameRunning && !gameOver) {
-    // paused
+  if (e.key === 'Escape') {
+    if (document.getElementById('copyDialog').style.display !== 'none') { closeCopyDialog(); return; }
+    if (document.getElementById('editModal').style.display  !== 'none') { closeModal(); return; }
+    if (composerOpen) closeComposer();
   }
 });
 
-function requestLock() {
-  document.getElementById('canvas').requestPointerLock();
-}
-
-function startGame() {
-  overlay.style.display = 'none';
-  initThree();
-  gameRunning = true;
-  requestLock();
-  gameLoop();
-}
-
-function restartGame() {
-  // Reset state
-  enemies.forEach(e => { if(e.mesh) scene.remove(e.mesh); });
-  enemyBullets.forEach(b => { if(b.mesh) scene.remove(b.mesh); });
-  particles.forEach(p => { if(p.mesh) scene.remove(p.mesh); });
-  enemies = []; enemyBullets = []; particles = []; trees = []; rocks = [];
-  player.health = 100;
-  ammo = 30;
-  score = 0; kills = 0; wave = 1;
-  gameOver = false;
-  reloading = false;
-  bobTime = 0; yaw = 0; pitch = 0;
-
-  healthFill.style.width = '100%';
-  ammoCount.textContent = maxAmmo;
-  scoreVal.textContent = '0';
-  gameover.style.display = 'none';
-
-  // Clear scene
-  while(scene.children.length > 0) scene.remove(scene.children[0]);
-  camera.position.set(0, 1.7, 0);
-  camera.add(gunGroup);
-  scene.add(camera);
-  buildWorld();
-  gameRunning = true;
-  requestLock();
-  startWave(1);
-}
-
-document.getElementById('canvas').addEventListener('click', () => {
-  if (gameRunning) requestLock();
+// Click outside composer
+document.addEventListener('click', e => {
+  const composer = document.getElementById('composer');
+  if (composerOpen && !composer.contains(e.target)) {
+    closeComposer();
+  }
 });
 </script>
 
